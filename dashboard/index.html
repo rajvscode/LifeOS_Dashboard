@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>🌿 LifeOS Dashboard</title>
+  <meta name="theme-color" content="#00e676">
+  <link rel="manifest" href="manifest.json">
+  <style>
+    :root { --accent: #00e676; --bg: #0b0b0b; --card:#0f1510; --muted:#ccc; }
+    body { background:var(--bg); color:#fff; font-family: "Segoe UI", sans-serif; margin:0;padding:20px; }
+    h1 { color:var(--accent); margin:0 0 8px 0;}
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .controls { display:flex; gap:10px; align-items:center; }
+    button { background:var(--accent); color:#000; border:0; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600;}
+    button.secondary { background:#222; color:#fff; border:1px solid #333;}
+    #status { color:var(--muted); margin-top:8px; }
+    .container { display:flex; gap:20px; margin-top:18px; align-items:flex-start; }
+    .left { flex:2; min-width:360px; }
+    .right { flex:1; min-width:260px; }
+    .progress-wrap { background:var(--card); padding:12px; border-radius:12px; box-shadow:0 0 10px #000; }
+    .progress-bar { height:12px; background:#222; border-radius:8px; overflow:hidden; }
+    .progress-fill { height:12px; background:var(--accent); width:0%; transition:width 0.5s;}
+    .task { background:linear-gradient(135deg,#101c10,#152419); padding:14px; margin:12px 0; border-radius:14px; display:flex; gap:12px; align-items:flex-start; box-shadow:0 0 12px #070707;}
+    .task-left { flex:1; }
+    .task-right { flex:1; border-left:1px solid rgba(255,255,255,0.06); padding-left:12px; color:#ddd; font-size:0.9em;}
+    .task .title { font-size:1.12em; color:#fff; font-weight:700; margin-bottom:6px;}
+    .task .meta { color:#aaa; font-size:0.9em; margin-bottom:8px;}
+    .task .buttons { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn-done { background:#28a745; color:#fff;}
+    .btn-prog { background:#ffc107; color:#000;}
+    .btn-miss { background:#d9534f; color:#fff;}
+    .missed { background:linear-gradient(135deg,#3b0000,#661111); border:1px solid #aa4444;}
+    .right .missed-header { color:#ff6b6b; font-weight:700; margin-bottom:8px; }
+    .small { font-size:0.9em; color:#ccc; }
+    .toggle { display:flex; align-items:center; gap:8px; color:var(--accent); }
+    #toast { position:fixed; right:20px; bottom:28px; background:#28a745; color:#fff; padding:12px 16px; border-radius:8px; opacity:0; pointer-events:none; transition:opacity .3s ease;}
+    #toast.show { opacity:1; pointer-events:auto; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>🌿 LifeOS Dashboard</h1>
+      <div id="status" class="small">✨ Live consciously, act mindfully.</div>
+    </div>
+
+    <div class="controls">
+      <label class="toggle"><input id="tomorrowToggle" type="checkbox" /> Show Tomorrow’s Tasks 🌅</label>
+      <button id="refreshBtn">🔄 Refresh</button>
+      <button id="notifyBtn" onclick="requestPermissions()">🔔 Enable Notifications</button>
+    </div>
+  </div>
+
+  <div id="nextHeader" style="margin-top:12px;color:var(--accent);font-weight:600;"></div>
+
+  <div class="container">
+    <div class="left">
+      <div class="progress-wrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>📅 Daily Wellness Tracker</div>
+          <div id="statsSummary" class="small">--</div>
+        </div>
+        <h3 style="margin:8px 0 8px 0">Today's Completion: <span id="percent">--</span></h3>
+        <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+      </div>
+
+      <div id="tasksContainer" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="right">
+      <div class="missed-header">⚠️ Missed Tasks</div>
+      <div id="missedContainer" style="min-height:40px;"></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+<script>
+  const API_ROOT = "https://lifeos-full-dashboard.rajeshv-lifeos.workers.dev";
+  let tasks = [];
+  let tomorrow = false;
+
+  document.getElementById("refreshBtn").addEventListener("click", loadTasks);
+  document.getElementById("tomorrowToggle").addEventListener("change", (e) => {
+    tomorrow = e.target.checked;
+    loadTasks();
+  });
+
+  // --- Notifications ---
+  async function requestPermissions() {
+    try {
+      const p = await Notification.requestPermission();
+      if (p === "granted") {
+        speak("Notifications enabled. LifeOS ready to remind you.");
+        showToast("✅ Notifications enabled");
+      } else {
+        showToast("⚠️ Notifications blocked (allow in browser settings)");
+      }
+    } catch (e) { console.error(e); showToast("⚠️ Notification error"); }
+  }
+
+  function showToast(msg, bg="#28a745") {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.style.background = bg; t.classList.add("show");
+    setTimeout(()=>t.classList.remove("show"), 3500);
+  }
+
+  function speak(text) {
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "en-IN";
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    } catch (e) { console.error(e); }
+  }
+
+  // --- Fetch tasks ---
+  async function loadTasks() {
+    document.getElementById("status").textContent = "🧠 LifeOS active and checking tasks...";
+    const q = tomorrow ? "?tomorrow=1" : "";
+    try {
+      const res = await fetch(`${API_ROOT}/tasks${q}`, {cache: "no-store"});
+      const data = await res.json();
+      if (!data || !data.tasks) { tasks = []; render(); return; }
+      tasks = data.tasks;
+      render();
+    } catch (err) {
+      console.error("Task fetch failed:", err);
+      showToast("❌ Failed to load tasks", "#dc3545");
+      document.getElementById("status").textContent = "❌ Failed to load tasks.";
+    }
+  }
+
+  // --- Render tasks into two columns look ---
+  function render() {
+	  const cont = document.getElementById("tasksContainer");
+	  const missedCont = document.getElementById("missedContainer");
+	  cont.innerHTML = "";
+	  missedCont.innerHTML = "";
+
+	  if (!tasks || tasks.length === 0) {
+		cont.innerHTML = "<p>🌿 No upcoming tasks found.</p>";
+		document.getElementById("nextHeader").textContent = "";
+		return;
+	  }
+
+	  // ✅ Filter out Done tasks — they shouldn't reappear in UI
+	  const activeTasks = tasks.filter(t => (t.status || "").toLowerCase() !== "done");
+
+	  // ✅ Sort chronologically by real time (handles AM/PM)
+	  activeTasks.sort((a, b) => {
+		const parseTime = (t) => {
+		  if (!t) return 0;
+		  const [time, meridian] = t.trim().split(/\s+/);
+		  const [h, m, s] = time.split(":").map(Number);
+		  let hours = h;
+		  if (meridian?.toLowerCase() === "pm" && h !== 12) hours += 12;
+		  if (meridian?.toLowerCase() === "am" && h === 12) hours = 0;
+		  return hours * 3600 + m * 60 + (s || 0);
+		};
+		return parseTime(a.start) - parseTime(b.start);
+	  });
+
+	  // ✅ Find next task
+	  const next = activeTasks.find(t => !["Done", "Missed"].includes((t.status || "")));
+	  document.getElementById("nextHeader").textContent =
+		next ? `🕒 Next: ${next.task} (${next.start})` : "";
+
+	  let doneCount = 0, missedCount = 0, progCount = 0, pendingCount = 0;
+
+	  activeTasks.forEach(t => {
+		const status = (t.status || "").toLowerCase();
+		const card = document.createElement("div");
+		card.className = "task";
+		if (status === "missed") card.classList.add("missed");
+
+		const left = document.createElement("div"); left.className = "task-left";
+		const right = document.createElement("div"); right.className = "task-right";
+
+		left.innerHTML = `
+		  <div class="title">${escapeHtml(t.task)}</div>
+		  <div class="meta">🕒 ${t.start} - ${t.end} • ${t.date}</div>
+		  <div class="buttons"></div>
+		`;
+
+		const buttons = left.querySelector(".buttons");
+		if (status === "missed") {
+		  buttons.innerHTML = `<button class="btn-done" onclick="updateStatus('${encodeURIComponent(t.key)}','Done', this)">✅ Done</button>`;
+		  missedCount++;
+		  // ✅ Only show missed tasks in right panel
+		  missedCont.appendChild(card);
+		} else {
+		  buttons.innerHTML = `
+			<button class="btn-done" onclick="updateStatus('${encodeURIComponent(t.key)}','Done', this)">✅ Done</button>
+			<button class="btn-prog" onclick="updateStatus('${encodeURIComponent(t.key)}','In Progress', this)">🔄 Progress</button>
+			<button class="btn-miss" onclick="updateStatus('${encodeURIComponent(t.key)}','Missed', this)">❌ Missed</button>
+		  `;
+		  const s = (t.status || "").toLowerCase();
+		  if (s === "done") doneCount++;
+		  else if (s === "in progress" || s === "inprogress") progCount++;
+		  else pendingCount++;
+		  cont.appendChild(card);
+		}
+
+		right.innerHTML = `
+		  <div class="small"><b>📂 Category:</b> ${escapeHtml(t.category || "General")}</div>
+		  <div class="small">🆔 Key: ${escapeHtml(t.key || "")}</div>
+		  <div style="margin-top:8px">${escapeHtml(t.description || t.notes || "")}</div>
+		`;
+		card.appendChild(left);
+		card.appendChild(right);
+	  });
+
+	  // ✅ Compute progress stats
+	  const total = Math.max(tasks.length, 1);
+	  const percent = Math.round((doneCount / total) * 100);
+	  document.getElementById("percent").textContent = `${percent}%`;
+	  document.getElementById("progressFill").style.width = `${percent}%`;
+	  document.getElementById("statsSummary").textContent =
+		`✅ Done: ${doneCount} • ⚠️ Missed: ${missedCount} • 🔄 InProg: ${progCount} • ⏳ Pending: ${pendingCount}`;
+	  document.getElementById("status").textContent = "🧠 LifeOS active and checking tasks...";
+	}
+
+
+  // --- Update status: call Worker -> Worker forwards to Apps Script
+  async function updateStatus(keyEncoded, status, btnEl) {
+    const key = decodeURIComponent(keyEncoded);
+    // disable button to avoid double click
+    if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = 0.6; }
+
+    try {
+      // Worker forwards query to Apps Script. We call action expected by your Apps Script.
+      // We'll try two forms to maximize compatibility (taskKey param + action).
+      const url = `${API_ROOT}/update?action=updateStatusAndSyncBackupV82&taskKey=${encodeURIComponent(key)}&status=${encodeURIComponent(status)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error("Update failed:", txt);
+        showToast("❌ Update failed", "#dc3545");
+      } else {
+        showToast("✅ Updated: " + status);
+        // refresh tasks to reflect change
+        await new Promise(r => setTimeout(r, 700));
+        await loadTasks();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("❌ Update error", "#dc3545");
+    } finally {
+      if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = 1; }
+    }
+  }
+
+  // small helper
+  function escapeHtml(s) {
+    if (!s) return "";
+    return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+  }
+
+  // initial
+  loadTasks();
+  // auto-refresh every 5 minutes
+  setInterval(loadTasks, 5*60*1000);
+</script>
+</body>
+</html>

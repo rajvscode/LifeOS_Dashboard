@@ -1,0 +1,7 @@
+name = "lifeos-full-dashboard"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+type = "javascript"
+
+account_id = "cf8cea47295cee48b582b2331ccafdce"
+workers_dev = true
