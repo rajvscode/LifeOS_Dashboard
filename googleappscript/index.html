@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <!-- 🌿 LifeOS PWA Integration -->
+    <link rel="manifest" href="?file=manifest">
+    <meta name="theme-color" content="#00e676">
+
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("?file=sw")
+            .then(() => console.log("✅ LifeOS Service Worker registered"))
+            .catch(err => console.error("❌ Service Worker registration failed:", err));
+        });
+      }
+    </script>
+
+
+    <style>
+      body {
+        font-family: "Segoe UI", sans-serif;
+        background-color: #0b0b0b;
+        color: white;
+        margin: 0;
+        padding: 20px;
+      }
+
+      h1 {
+        color: #00e676;
+        margin: 0;
+      }
+
+      /* --- Header --- */
+      .header-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+      }
+
+      .header-right {
+        text-align: right;
+        font-size: 0.9em;
+        color: #ccc;
+        line-height: 1.5;
+      }
+
+      .header-right h3 {
+        color: #00e676;
+        margin: 0;
+        font-size: 1em;
+      }
+
+      #lastSynced {
+        font-size: 0.8em;
+        color: #aaa;
+        margin-top: 4px;
+      }
+
+      #nextTaskInfo {
+        margin: 10px 0;
+        font-size: 1.1em;
+        color: #00e676;
+      }
+
+      .container {
+        display: flex;
+        gap: 25px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        opacity: 1;
+        transition: opacity 0.5s ease-in-out;
+      }
+
+      .fade-out {
+        opacity: 0;
+      }
+
+      .left-panel {
+        flex: 2;
+        min-width: 400px;
+      }
+
+      .right-panel {
+        flex: 1;
+        min-width: 300px;
+      }
+
+      .task {
+        margin: 15px 0;
+        padding: 15px 20px;
+        border-radius: 15px;
+        box-shadow: 0 0 10px #222;
+        background: linear-gradient(135deg, #101c10, #1e2e1e);
+        transition: all 0.3s ease;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 15px;
+      }
+
+      .task:hover {
+        transform: scale(1.015);
+        box-shadow: 0 0 15px #00e676;
+      }
+
+      .task.current {
+        background: linear-gradient(135deg, #004d00, #007f00);
+        box-shadow: 0 0 20px #00ff80;
+      }
+
+      .task.missed {
+        background: linear-gradient(135deg, #400, #900);
+        border: 1px solid #ff4444;
+      }
+
+      .task-left {
+        flex: 1;
+        min-width: 250px;
+      }
+
+      .task-right {
+        flex: 1.2;
+        min-width: 300px;
+        border-left: 1px solid rgba(255,255,255,0.1);
+        padding-left: 15px;
+        color: #ccc;
+        font-size: 0.9em;
+        line-height: 1.5em;
+      }
+
+      .task-right div {
+        margin-bottom: 4px;
+      }
+
+      .desc-icon {
+        margin-right: 6px;
+      }
+
+      .category {
+        font-weight: bold;
+        color: #00e676;
+        font-size: 1.1em;
+      }
+
+      .title {
+        font-size: 1.3em;
+        font-weight: 600;
+        margin-top: 5px;
+        color: #fff;
+      }
+
+      .buttons button {
+        background: #222;
+        color: white;
+        border: 1px solid #555;
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin: 4px 3px;
+        font-size: 0.9em;
+        cursor: pointer;
+        transition: transform 0.1s ease, box-shadow 0.2s;
+      }
+
+      .buttons button:active {
+        transform: scale(0.95);
+        box-shadow: 0 0 10px #00e676;
+      }
+
+      .buttons button.done {
+        background: #28a745;
+      }
+
+      .buttons button.missed {
+        background: #d9534f;
+      }
+
+      .buttons button.progress {
+        background: #ffc107;
+        color: black;
+      }
+
+      .desc-box {
+        text-align: right;
+        color: #ccc;
+        font-size: 0.9em;
+        margin-top: 10px;
+        border-top: 1px solid #333;
+        padding-top: 8px;
+        line-height: 1.4em;
+        white-space: normal;
+        word-wrap: break-word;
+      }
+
+      #refreshBtn,
+      #reconcileBtn {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        font-size: 1em;
+        border-radius: 10px;
+        cursor: pointer;
+        margin-right: 10px;
+      }
+
+      #reconcileBtn {
+        background: #6f42c1;
+      }
+
+      .missed-header {
+        margin: 10px 0;
+        color: #ff4444;
+        font-weight: bold;
+        font-size: 1.3em;
+      }
+
+      .progress-container {
+        background: #333;
+        border-radius: 10px;
+        height: 15px;
+        margin-top: 5px;
+      }
+
+      .progress-bar {
+        height: 15px;
+        background: #00e676;
+        border-radius: 10px;
+        width: 0%;
+        transition: width 0.5s ease-in-out;
+      }
+
+      #toast {
+        visibility: hidden;
+        min-width: 250px;
+        background: #28a745;
+        color: #fff;
+        text-align: center;
+        border-radius: 8px;
+        padding: 14px;
+        position: fixed;
+        z-index: 9999;
+        right: 20px;
+        bottom: 30px;
+        font-size: 1em;
+        opacity: 0;
+        transition: opacity 0.5s, bottom 0.5s;
+      }
+
+      #toast.show {
+        visibility: visible;
+        opacity: 1;
+        bottom: 40px;
+      }
+
+      #quote {
+        font-size: 1.1em;
+        color: #ffc107;
+        margin-bottom: 12px;
+        font-style: italic;
+      }
+
+      #yesterdayStats {
+        color: #aaa;
+        font-size: 0.9em;
+        margin-bottom: 8px;
+      }
+
+      .toggle-switch {
+        display: flex;
+        align-items: center;
+        margin-top: 10px;
+      }
+
+      .toggle-switch label {
+        margin-left: 8px;
+        color: #00e676;
+        font-size: 0.95em;
+      }
+      .fade-out {
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+      }
+
+      .fade-in {
+        opacity: 1;
+        transition: opacity 0.3s ease-in-out;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transition: opacity 0.2s ease;
+      }
+      @media (max-width: 600px) {
+        .task {
+          flex-direction: column;
+        }
+        .task-right {
+          border-left: none;
+          border-top: 1px solid rgba(255,255,255,0.1);
+          padding-left: 0;
+          padding-top: 10px;
+        }
+      }
+
+    </style>
+  </head>
+
+  <body>
+    <!-- ===== HEADER ===== -->
+    <div class="header-bar">
+      <div>
+        <h1>🌿 LifeOS Dashboard</h1>
+        <div id="quote">✨ Loading daily quote...</div>
+        <div class="toggle-switch">
+          <input type="checkbox" id="tomorrowToggle" onchange="toggleTomorrowTasks(this)" />
+          <label for="tomorrowToggle">Show Tomorrow’s Tasks 🌅</label>
+        </div>
+        <div style="margin-top:6px;">
+          <button id="refreshBtn" onclick="loadTasks()">🔄 Refresh</button>
+          <button id="reconcileBtn" onclick="manualReconcile()">🧭 Reconcile</button>
+        </div>
+      </div>
+      <div class="header-right">
+        <h3>📅 Daily Performance</h3>
+        <div id="dailyStatsTop">--</div>
+        <div id="yesterdayStats">--</div>
+        <div id="lastSynced">Last Synced – --:-- --</div>
+      </div>
+    </div>
+
+    <div id="nextTaskInfo"></div>
+
+    <div id="progress">
+      <h3>Today's Completion: <span id="percent">0%</span></h3>
+      <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="container" id="mainContainer">
+      <div class="left-panel">
+        <div id="tasks">Loading tasks...</div>
+      </div>
+
+      <div class="right-panel">
+        <div class="missed-header">⚠️ Missed Tasks</div>
+        <div id="missed"></div>
+      </div>
+    </div>
+
+    <div id="toast">✅ Tracker and Backup successfully reconciled</div>
+
+    <script>
+      let nextReminderTimer = null;
+      const tzOpts = { hour: "2-digit", minute: "2-digit", hour12: true };
+
+      function updateLastSynced() {
+        const now = new Date();
+        document.getElementById("lastSynced").innerText =
+          "Last Synced – " + now.toLocaleTimeString("en-IN", tzOpts);
+      }
+
+      function showToast(msg, bg = "#28a745") {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.style.backgroundColor = bg;
+        t.className = "show";
+        setTimeout(() => (t.className = t.className.replace("show", "")), 4000);
+      }
+
+      function loadTasks(forTomorrow = false) {
+        const container = document.getElementById("mainContainer");
+        if (container) container.classList.add("fade-out");
+
+        // Disable buttons briefly for feedback
+        const refreshBtn = document.getElementById("refreshBtn");
+        const reconcileBtn = document.getElementById("reconcileBtn");
+        if (refreshBtn) refreshBtn.disabled = true;
+        if (reconcileBtn) reconcileBtn.disabled = true;
+
+        setTimeout(() => {
+          document.getElementById("tasks").innerHTML = "⏳ Loading tasks...";
+
+          // --- Run all async calls in parallel ---
+          const getTasks = new Promise((resolve) =>
+            google.script.run.withSuccessHandler(resolve).getUpcomingTasks(forTomorrow)
+          );
+
+          const getStats1 = new Promise((resolve) =>
+            google.script.run.withSuccessHandler(resolve).getStats(1)
+          );
+
+          const getStats2 = new Promise((resolve) =>
+            google.script.run.withSuccessHandler(resolve).getStats(2)
+          );
+
+          const getQuote = new Promise((resolve) =>
+            google.script.run.withSuccessHandler(resolve).getDailyQuote()
+          );
+
+          const getMeta = new Promise((resolve) =>
+            google.script.run.withSuccessHandler(resolve).getMetadata("Tracker_Backup_LastGenerated")
+          );
+
+          // --- When all are done ---
+          Promise.all([getTasks, getStats1, getStats2, getQuote, getMeta])
+            .then(([data, statsToday, statsYesterday, quote, lastSync]) => {
+              if (!data || !data.tasks) {
+                document.getElementById("tasks").innerHTML = "<h2>No tasks found</h2>";
+                return;
+              }
+
+              // ✅ Render main task list
+              renderTasks(data.tasks);
+
+              // 🔊 Voice reminder
+              if (data.voiceReminder) speak(data.voiceReminder);
+
+              // ⏰ Schedule next reminder
+              scheduleVoiceReminder(data.tasks);
+
+              // 🕒 Update next task header
+              document.getElementById("nextTaskInfo").innerHTML = data.nextLabel || "";
+
+              // ⏳ Auto-refresh countdown header every minute (only header refresh)
+              if (window.nextTaskTimer) clearInterval(window.nextTaskTimer);
+                window.nextTaskTimer = setInterval(() => {
+                  google.script.run.withSuccessHandler((upd) => {
+                    document.getElementById("nextTaskInfo").innerHTML = upd.nextLabel || "";
+                  }).getUpcomingTasks();
+                }, 60000);
+
+
+              // 📊 Render stats (today + yesterday)
+              renderDailyTop(statsToday);
+              renderYesterdayTop(statsYesterday);
+
+              // 💬 Quote of the Day
+              document.getElementById("quote").innerText =
+                quote || "✨ Stay positive and consistent.";
+
+              // 🕓 Metadata timestamp
+              if (lastSync)
+                document.getElementById("lastSynced").innerText = "🕒 Last Sheet Sync – " + lastSync;
+
+              // ✅ UI animations & re-enable
+              if (container) {
+                container.classList.remove("fade-out");
+                container.classList.add("fade-in");
+                setTimeout(() => container.classList.remove("fade-in"), 500);
+              }
+              if (refreshBtn) refreshBtn.disabled = false;
+              if (reconcileBtn) reconcileBtn.disabled = false;
+
+              // Update time text
+              updateLastSynced();
+            })
+            .catch((err) => {
+              console.error("❌ loadTasks error:", err);
+              showToast("⚠️ Failed to load dashboard: " + err.message, "#dc3545");
+            });
+        }, 200);
+      }
+
+
+      function toggleTomorrowTasks(chk) {
+        const isTomorrow = chk.checked;
+        loadTasks(isTomorrow);
+        showToast(isTomorrow ? "🌅 Showing Tomorrow’s Tasks" : "📅 Showing Today");
+      }
+
+      function renderTasks(tasks) {
+        const now = new Date();
+        let html = "", missedHtml = "", done = 0;
+        const active = tasks.filter((t) => t.status !== "Missed" && t.status !== "Done");
+        const missed = tasks.filter((t) => t.status === "Missed");
+
+        // Helper: prettify each description line
+        function formatDescLine(line) {
+          if (!line) return "";
+          line = line.trim();
+
+          // ✅ Avoid duplicate icons — skip if already has emoji at start
+          if (/^[\u{1F300}-\u{1FAFF}]/u.test(line)) {
+            return `<div>${line}</div>`;
+          }
+
+          // Otherwise, auto-detect and prepend appropriate emoji
+          if (/category/i.test(line)) return `<div>📂 ${line}</div>`;
+          if (/key/i.test(line)) return `<div>🆔 ${line}</div>`;
+          if (/time/i.test(line)) return `<div>🕒 ${line}</div>`;
+          if (/notes?/i.test(line)) return `<div>🪷 ${line}</div>`;
+          if (/special/i.test(line)) return `<div>🌿 ${line}</div>`;
+          return `<div>📝 ${line}</div>`;
+        }
+
+        // 🔹 Build Active Task Cards
+        active.forEach((t) => {
+          const start = new Date(`${t.date}T${t.start}:00+05:30`);
+          const end = new Date(`${t.date}T${t.end}:00+05:30`);
+          const current = now >= start && now <= end;
+
+          const desc = (t.description || "").split("\n").map(formatDescLine).join("");
+
+          html += `
+            <div class="task ${current || t.status === "In Progress" ? "current" : ""}">
+              <div class="task-left">
+                <div class="category">${t.category}</div>
+                <div class="title">${t.task}</div>
+                <div>🕒 ${t.date} | ${t.start}</div>
+                <div class="buttons">
+                  <button class="done" onclick="update(${t.row}, 'Done', '${t.key || ""}')">✅ Done</button>
+                  <button class="progress" onclick="update(${t.row}, 'In Progress', '${t.key || ""}')">🔄 Progress</button>
+                  <button class="missed" onclick="update(${t.row}, 'Missed', '${t.key || ""}')">❌ Missed</button>
+                </div>
+              </div>
+              <div class="task-right">
+                ${desc || "<div><i>No details</i></div>"}
+              </div>
+            </div>`;
+          if (t.status === "Done") done++;
+        });
+
+        // ✅ Debug log for rendered keys
+        console.log("🔍 Rendered task keys:");
+        tasks.forEach(t => console.log(`${t.task} → key: ${t.key}`));
+
+        // 🔹 Build Missed Tasks
+        missed.forEach((t) => {
+          const desc = (t.description || "").split("\n").map(formatDescLine).join("");
+          missedHtml += `
+            <div class="task missed">
+              <div class="task-left">
+                <div class="category">${t.category}</div>
+                <div class="title">${t.task}</div>
+                <div>🕒 ${t.date} | ${t.start}</div>
+                <div class="buttons">
+                  <button class="done" onclick="update(${t.row}, 'Done', '${t.key || ""}')">✅ Done</button>
+                </div>
+              </div>
+              <div class="task-right">
+                ${desc || "<div><i>No details</i></div>"}
+              </div>
+            </div>`;
+        });
+
+        // Inject to DOM
+        document.getElementById("tasks").innerHTML = html || "<h2>No upcoming tasks</h2>";
+        document.getElementById("missed").innerHTML = missedHtml || "<p>No missed tasks 🎉</p>";
+
+        // Completion %
+        const percent = Math.round((done / tasks.length) * 100);
+        document.getElementById("percent").innerText = percent + "%";
+        document.getElementById("progressBar").style.width = percent + "%";
+      }
+
+
+
+
+
+      function renderDailyTop(stats) {
+        if (!stats || !stats.stats) return;
+        const s = stats.stats;
+        const html = `✅ Done: ${s.Done || 0} &nbsp; ⚠️ Missed: ${s.Missed || 0} &nbsp; 🔄 In Progress: ${
+          s["In Progress"] || 0
+        } &nbsp; 🕒 Pending: ${s.Pending || 0}`;
+        document.getElementById("dailyStatsTop").innerHTML = html;
+
+        // ✅ Sync the progress bar to actual stats
+        const total = (s.Done || 0) + (s.Missed || 0) + (s["In Progress"] || 0) + (s.Pending || 0);
+        const percent = total > 0 ? Math.round(((s.Done || 0) / total) * 100) : 0;
+        document.getElementById("percent").innerText = percent + "%";
+        document.getElementById("progressBar").style.width = percent + "%";
+      }
+
+
+      function renderYesterdayTop(stats) {
+        if (!stats || !stats.stats) return;
+        const s = stats.stats;
+        const html = `📊 Yesterday → ✅ ${s.Done || 0} done, ⚠️ ${s.Missed || 0} missed`;
+        document.getElementById("yesterdayStats").innerHTML = html;
+      }
+
+      function manualReconcile() {
+        const b = document.getElementById("reconcileBtn");
+        b.innerText = "🧭 Reconciling...";
+        google.script.run
+          .withSuccessHandler(() => {
+            speak("Reconciliation complete");
+            showToast("✅ Tracker and Backup successfully reconciled", "#28a745");
+            updateLastSynced();
+            b.innerText = "🧭 Reconcile";
+            loadTasks();
+          })
+          .withFailureHandler((e) => {
+            showToast("❌ Reconcile failed: " + e.message, "#dc3545");
+            b.innerText = "🧭 Reconcile";
+          })
+          .reconcileTrackerAndBackup();
+      }
+
+      function update(row, status, taskKey) {
+        console.log("🟢 update() called with:", { row, status, taskKey });
+
+        // Sanity check for taskKey
+        if (!taskKey || taskKey === "undefined" || taskKey === "null") {
+          showToast("⚠️ Missing task key — cannot sync to backup", "#ffc107");
+          console.warn("⚠️ Task key missing for row:", row, "status:", status);
+        }
+
+        // Visual feedback
+        speak(status === "Done" ? "Task completed" : status);
+        const taskDiv = Array.from(document.querySelectorAll(".task"))
+          .find(div => div.innerHTML.includes(`update(${row},`));
+
+        if (taskDiv) {
+          taskDiv.style.transition = "opacity 0.4s ease";
+          taskDiv.style.opacity = "0.5";
+          showToast(`✅ Task marked as ${status}`);
+        }
+
+        // Call backend
+        google.script.run
+          .withSuccessHandler(() => {
+            console.log("✅ updateStatusAndSyncBackupV82 completed successfully for key:", taskKey);
+            if (status === "Done" || status === "Missed") taskDiv?.remove();
+            updateLocalProgress(status);
+            google.script.run.withSuccessHandler(renderDailyTop).getStats(1);
+            google.script.run.withFailureHandler(() => {
+              console.log("Stats cache refresh skipped");
+            }).updateDailyStatsCache?.();
+          })
+          .withFailureHandler((e) => {
+            showToast("❌ Failed to update: " + e.message, "#dc3545");
+            console.error("❌ updateStatusAndSyncBackupV82 failed:", e);
+            if (taskDiv) taskDiv.style.opacity = "1";
+          })
+          .updateStatusAndSyncBackupV82(taskKey, status);
+      }
+
+
+
+
+
+      function updateLocalProgress(status) {
+        const bar = document.getElementById("progressBar");
+        const percentText = document.getElementById("percent");
+        const allTasks = document.querySelectorAll(".task");
+        const total = allTasks.length || 1;
+        const done = document.querySelectorAll(".task[style*='opacity: 0.5']").length;
+        const percent = Math.round((done / total) * 100);
+        bar.style.width = percent + "%";
+        percentText.innerText = percent + "%";
+      }
+
+
+      function scheduleVoiceReminder(tasks) {
+        if (nextReminderTimer) clearTimeout(nextReminderTimer);
+        if (!tasks || !tasks.length) return;
+        const now = Date.now();
+        const next = tasks.find(
+          (t) => new Date(`${t.date}T${t.start}:00+05:30`).getTime() > now && t.status !== "Done"
+        );
+        if (!next) return;
+        const delay = new Date(`${next.date}T${next.start}:00+05:30`).getTime() - now - 5 * 60000;
+        if (delay > 0)
+          nextReminderTimer = setTimeout(() => speak(`Rajesh, your next task ${next.task} starts in 5 minutes.`), delay);
+      }
+
+      function speak(txt) {
+        try {
+          const u = new SpeechSynthesisUtterance(txt);
+          u.lang = "en-IN";
+          u.rate = 1.05;
+          speechSynthesis.cancel();
+          speechSynthesis.speak(u);
+        } catch (e) {}
+      }
+
+      google.script.run
+        .withSuccessHandler((ts) => {
+          if (ts) document.getElementById("lastSynced").innerText = "🕓 Last Sheet Sync – " + ts;
+        })
+        .getMetadata("Tracker_Backup_LastGenerated");
+
+      loadTasks();
+    </script>
+  </body>
+</html>
